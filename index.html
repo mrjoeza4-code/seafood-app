@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ระบบบัญชีหลายร้านค้า (เชื่อมต่อ Cloud)</title>
+  
+  <style>
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      background-color: #f0f2f5;
+      padding: 15px;
+      display: flex;
+      justify-content: center;
+    }
+    .card {
+      background: white;
+      padding: 20px;
+      border-radius: 16px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+      width: 100%;
+      max-width: 500px;
+    }
+    h2 { text-align: center; color: #1a1a1a; margin-top: 0; }
+    
+    .store-section {
+      background-color: #eef6ff;
+      padding: 12px;
+      border-radius: 10px;
+      margin-bottom: 15px;
+      border: 1px solid #bce0fd;
+    }
+    .store-add {
+      display: flex;
+      gap: 5px;
+      margin-top: 8px;
+    }
+
+    .form-group {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      margin-bottom: 20px;
+    }
+    input, select, button {
+      padding: 10px;
+      border-radius: 8px;
+      border: 1px solid #ccc;
+      font-size: 15px;
+    }
+    button {
+      background-color: #007aff;
+      color: white;
+      border: none;
+      font-weight: bold;
+      cursor: pointer;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 10px;
+    }
+    th, td {
+      border: 1px solid #ddd;
+      padding: 8px;
+      text-align: center;
+      font-size: 14px;
+    }
+    th { background-color: #f2f2f2; }
+    .income-text { color: #28a745; font-weight: bold; }
+    .expense-text { color: #dc3545; font-weight: bold; }
+    
+    .btn-delete {
+      background-color: #ff3b30;
+      color: white;
+      border: none;
+      padding: 4px 8px;
+      border-radius: 6px;
+      font-size: 12px;
+      cursor: pointer;
+    }
+
+    .summary-box {
+      background-color: #e9ecef;
+      padding: 12px;
+      border-radius: 8px;
+      margin-top: 15px;
+      display: flex;
+      justify-content: space-between;
+      font-weight: bold;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="card">
+    <h2 id="app-title">🏪 บัญชีร้านค้า</h2>
+
+    <!-- ส่วนเลือกและเพิ่มร้านค้า -->
+    <div class="store-section">
+      <label><b>เลือกเล่มบัญชีร้านค้า:</b></label>
+      <select id="store-select" onchange="changeStore()" style="width: 100%; margin-top: 5px;">
+        <option value="ร้านลุงแอ๊ตซีฟู้ด">ร้านลุงแอ๊ตซีฟู้ด</option>
+      </select>
+
+      <div class="store-add">
+        <input type="text" id="new-store-name" placeholder="เพิ่มชื่อร้านใหม่..." style="flex: 1;">
+        <button onclick="addNewStore()">+ เพิ่มร้าน</button>
+      </div>
+    </div>
+
+    <!-- ฟอร์มกรอกรายการ -->
+    <div class="form-group">
+      <input type="date" id="date">
+      <input type="text" id="memo" placeholder="รายการ (เช่น ค่าปูม้า, ค่าน้ำ)">
+      <select id="type">
+        <option value="income">🟢 รายรับ</option>
+        <option value="expense">🔴 รายจ่าย</option>
+      </select>
+      <input type="number" id="amount" placeholder="จำนวนเงิน (บาท)">
+      <button onclick="addTransaction()">+ บันทึกรายการ</button>
+    </div>
+
+    <!-- ตารางรายการ -->
+    <h3>ตารางบันทึกรายการ</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>วันที่</th>
+          <th>รายการ</th>
+          <th>รายรับ</th>
+          <th>รายจ่าย</th>
+          <th>จัดการ</th>
+        </tr>
+      </thead>
+      <tbody id="table-body"></tbody>
+    </table>
+
+    <!-- ยอดรวม -->
+    <div class="summary-box">
+      <span>เงินคงเหลือร้านนี้:</span>
+      <span id="total-balance">0 บาท</span>
+    </div>
+  </div>
+
+  <!-- โหลด Firebase SDK -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+    import { getFirestore, collection, addDoc, getDocs, deleteDoc, doc, query, where } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+
+    // ⚠️ นำค่า firebaseConfig จากหน้าเว็บ Firebase Console มาวางแทนตรงนี้ครับ
+    const firebaseConfig = {
+      apiKey: "YOUR_API_KEY",
+      authDomain: "YOUR_PROJECT.firebaseapp.com",
+      projectId: "YOUR_PROJECT_ID",
+      storageBucket: "YOUR_PROJECT.appspot.com",
+      messagingSenderId: "YOUR_SENDER_ID",
+      appId: "YOUR_APP_ID"
+    };
+
+    // เริ่มต้นเชื่อมต่อ Firebase
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+
+    let currentStore = "ร้านลุงแอ๊ตซีฟู้ด";
+
+    // ฟังก์ชันดึงข้อมูลจาก Firebase
+    async function loadData() {
+      const tbody = document.getElementById('table-body');
+      tbody.innerHTML = "<tr><td colspan='5'>กำลังโหลดข้อมูล...</td></tr>";
+
+      document.getElementById('app-title').textContent = `🏪 บัญชี: ${currentStore}`;
+
+      const q = query(collection(db, "transactions"), where("store", "==", currentStore));
+      const querySnapshot = await getDocs(q);
+
+      tbody.innerHTML = "";
+      let totalIncome = 0;
+      let totalExpense = 0;
+
+      querySnapshot.forEach((docSnap) => {
+        const item = docSnap.data();
+        const id = docSnap.id;
+        const tr = document.createElement('tr');
+        const isIncome = item.type === 'income';
+
+        if (isIncome) totalIncome += item.amount;
+        else totalExpense += item.amount;
+
+        tr.innerHTML = `
+          <td>${item.date}</td>
+          <td>${item.memo}</td>
+          <td class="income-text">${isIncome ? item.amount : '-'}</td>
+          <td class="expense-text">${!isIncome ? item.amount : '-'}</td>
+          <td><button class="btn-delete" onclick="deleteTransaction('${id}')">ลบ</button></td>
+        `;
+        tbody.appendChild(tr);
+      });
+
+      const balance = totalIncome - totalExpense;
+      const balanceElement = document.getElementById('total-balance');
+      balanceElement.textContent = `${balance} บาท`;
+      balanceElement.style.color = balance >= 0 ? "#28a745" : "#dc3545";
+    }
+
+    // บันทึกรายการลง Firebase
+    window.addTransaction = async function() {
+      const date = document.getElementById('date').value;
+      const memo = document.getElementById('memo').value || "-";
+      const type = document.getElementById('type').value;
+      const amount = Number(document.getElementById('amount').value);
+
+      if (!date || !amount) {
+        alert("กรุณากรอกวันที่และจำนวนเงิน");
+        return;
+      }
+
+      await addDoc(collection(db, "transactions"), {
+        store: currentStore,
+        date,
+        memo,
+        type,
+        amount
+      });
+
+      document.getElementById('memo').value = "";
+      document.getElementById('amount').value = "";
+
+      loadData();
+    };
+
+    // ลบรายการออกจาก Firebase
+    window.deleteTransaction = async function(id) {
+      if (confirm("คุณต้องการลบรายการนี้ใช่หรือไม่?")) {
+        await deleteDoc(doc(db, "transactions", id));
+        loadData();
+      }
+    };
+
+    // สลับร้านค้า
+    window.changeStore = function() {
+      currentStore = document.getElementById('store-select').value;
+      loadData();
+    };
+
+    // เพิ่มร้านค้าใหม่
+    window.addNewStore = function() {
+      const nameInput = document.getElementById('new-store-name');
+      const storeName = nameInput.value.trim();
+
+      if (!storeName) {
+        alert("กรุณากรอกชื่อร้านค้า");
+        return;
+      }
+
+      const select = document.getElementById('store-select');
+      const option = document.createElement('option');
+      option.value = storeName;
+      option.textContent = storeName;
+      select.appendChild(option);
+
+      select.value = storeName;
+      currentStore = storeName;
+      nameInput.value = "";
+
+      loadData();
+    };
+
+    // โหลดข้อมูลครั้งแรก
+    loadData();
+  </script>
+
+</body>
+</html>
