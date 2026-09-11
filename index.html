@@ -4,7 +4,6 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>ระบบบัญชีหลายร้านค้า (เชื่อมต่อ Cloud)</title>
-  
   <style>
     body {
       font-family: system-ui, -apple-system, sans-serif;
@@ -22,7 +21,6 @@
       max-width: 500px;
     }
     h2 { text-align: center; color: #1a1a1a; margin-top: 0; }
-    
     .store-section {
       background-color: #eef6ff;
       padding: 12px;
@@ -35,7 +33,6 @@
       gap: 5px;
       margin-top: 8px;
     }
-
     .form-group {
       display: flex;
       flex-direction: column;
@@ -55,7 +52,6 @@
       font-weight: bold;
       cursor: pointer;
     }
-
     table {
       width: 100%;
       border-collapse: collapse;
@@ -70,7 +66,6 @@
     th { background-color: #f2f2f2; }
     .income-text { color: #28a745; font-weight: bold; }
     .expense-text { color: #dc3545; font-weight: bold; }
-    
     .btn-delete {
       background-color: #ff3b30;
       color: white;
@@ -80,7 +75,6 @@
       font-size: 12px;
       cursor: pointer;
     }
-
     .summary-box {
       background-color: #e9ecef;
       padding: 12px;
@@ -144,19 +138,20 @@
     </div>
   </div>
 
-  <!-- โหลด Firebase SDK -->
+  <!-- โหลด Firebase SDK และเชื่อมต่อระบบฐานข้อมูล -->
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
     import { getFirestore, collection, addDoc, getDocs, deleteDoc, doc, query, where } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
-    // ⚠️ นำค่า firebaseConfig จากหน้าเว็บ Firebase Console มาวางแทนตรงนี้ครับ
+    // ค่า Config ที่ได้จากโปรเจกต์ Firebase ของคุณ
     const firebaseConfig = {
-      apiKey: "YOUR_API_KEY",
-      authDomain: "YOUR_PROJECT.firebaseapp.com",
-      projectId: "YOUR_PROJECT_ID",
-      storageBucket: "YOUR_PROJECT.appspot.com",
-      messagingSenderId: "YOUR_SENDER_ID",
-      appId: "YOUR_APP_ID"
+      apiKey: "AIzaSyCer6GJbAhypwNBfwBnOLF40P9O4X3brps",
+      authDomain: "seafood-94a0d.firebaseapp.com",
+      projectId: "seafood-94a0d",
+      storageBucket: "seafood-94a0d.firebasestorage.app",
+      messagingSenderId: "497306350586",
+      appId: "1:497306350586:web:87b8e3bd9cb4d219226a43",
+      measurementId: "G-X2YQR06LG2"
     };
 
     // เริ่มต้นเชื่อมต่อ Firebase
@@ -267,9 +262,8 @@
       loadData();
     };
 
-    // โหลดข้อมูลครั้งแรก
+    // โหลดข้อมูลครั้งแรกเมื่อเปิดหน้าเว็บ
     loadData();
   </script>
-
 </body>
 </html>
