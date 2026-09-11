@@ -33,6 +33,16 @@
       gap: 5px;
       margin-top: 8px;
     }
+    .filter-section {
+      background-color: #f8f9fa;
+      padding: 10px;
+      border-radius: 8px;
+      margin-bottom: 15px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border: 1px solid #e9ecef;
+    }
     .form-group {
       display: flex;
       flex-direction: column;
@@ -116,6 +126,17 @@
       <button onclick="addTransaction()">+ บันทึกรายการ</button>
     </div>
 
+    <!-- ตัวกรองช่วงเวลา -->
+    <div class="filter-section">
+      <label><b>📅 ช่วงเวลา:</b></label>
+      <select id="time-filter" onchange="loadData()" style="padding: 5px 10px;">
+        <option value="all">แสดงทั้งหมด</option>
+        <option value="daily">📅 วันนี้</option>
+        <option value="weekly">🗓️ สัปดาห์นี้</option>
+        <option value="monthly">📆 เดือนนี้</option>
+      </select>
+    </div>
+
     <!-- ตารางรายการ -->
     <h3>ตารางบันทึกรายการ</h3>
     <table>
@@ -133,7 +154,7 @@
 
     <!-- ยอดรวม -->
     <div class="summary-box">
-      <span>เงินคงเหลือร้านนี้:</span>
+      <span>เงินคงเหลือช่วงเวลานี้:</span>
       <span id="total-balance">0 บาท</span>
     </div>
   </div>
@@ -160,33 +181,78 @@
 
     let currentStore = "ร้านลุงแอ๊ตซีฟู้ด";
 
+    // กำหนดวันที่เริ่มต้นให้ช่อง Date Input เป็นวันปัจจุบัน
+    document.getElementById('date').valueAsDate = new Date();
+
     // โหลดรายชื่อร้านค้าทั้งหมดจาก Firebase
     async function loadStores() {
       const select = document.getElementById('store-select');
-      select.innerHTML = '<option value="ร้านลุงแอ๊ตซีฟู้ด">ร้านลุงแอ๊ตซีฟู้ด</option>';
+      let storeList = ["ร้านลุงแอ๊ตซีฟู้ด"];
 
       try {
         const querySnapshot = await getDocs(collection(db, "stores"));
         querySnapshot.forEach((docSnap) => {
           const storeData = docSnap.data();
-          if (storeData.name && storeData.name !== "ร้านลุงแอ๊ตซีฟู้ด") {
-            const option = document.createElement('option');
-            option.value = storeData.name;
-            option.textContent = storeData.name;
-            select.appendChild(option);
+          if (storeData.name && !storeList.includes(storeData.name)) {
+            storeList.push(storeData.name);
           }
         });
+
+        select.innerHTML = "";
+        storeList.forEach((storeName) => {
+          const option = document.createElement('option');
+          option.value = storeName;
+          option.textContent = storeName;
+          if (storeName === currentStore) {
+            option.selected = true;
+          }
+          select.appendChild(option);
+        });
+
       } catch (error) {
         console.error("เกิดข้อผิดพลาดในการโหลดร้านค้า:", error);
       }
     }
 
-    // ฟังก์ชันดึงข้อมูลรายการจาก Firebase
+    // ฟังก์ชันตรวจสอบเงื่อนไขวันที่สำหรับตัวกรอง
+    function isDateInFilter(dateStr, filterType) {
+      if (filterType === "all") return true;
+
+      const itemDate = new Date(dateStr + "T00:00:00");
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+
+      if (filterType === "daily") {
+        return itemDate.getTime() === today.getTime();
+      }
+
+      if (filterType === "weekly") {
+        const dayOfWeek = today.getDay();
+        const startOfWeek = new Date(today);
+        startOfWeek.setDate(today.getDate() - dayOfWeek); // วันอาทิตย์ต้นสัปดาห์
+
+        const endOfWeek = new Date(startOfWeek);
+        endOfWeek.setDate(startOfWeek.getDate() + 6); // วันเสาร์ปลายสัปดาห์
+
+        return itemDate >= startOfWeek && itemDate <= endOfWeek;
+      }
+
+      if (filterType === "monthly") {
+        return itemDate.getFullYear() === today.getFullYear() && 
+               itemDate.getMonth() === today.getMonth();
+      }
+
+      return true;
+    }
+
+    // ฟังก์ชันดึงข้อมูลรายการจาก Firebase พร้อมระบบกรองรายวัน/สัปดาห์/เดือน
     async function loadData() {
       const tbody = document.getElementById('table-body');
       tbody.innerHTML = "<tr><td colspan='5'>กำลังโหลดข้อมูล...</td></tr>";
 
       document.getElementById('app-title').textContent = `🏪 บัญชี: ${currentStore}`;
+
+      const filterType = document.getElementById('time-filter').value;
 
       try {
         const q = query(collection(db, "transactions"), where("store", "==", currentStore));
@@ -199,21 +265,28 @@
         querySnapshot.forEach((docSnap) => {
           const item = docSnap.data();
           const id = docSnap.id;
-          const tr = document.createElement('tr');
           const isIncome = item.type === 'income';
 
-          if (isIncome) totalIncome += item.amount;
-          else totalExpense += item.amount;
+          // ตรวจสอบเงื่อนไขช่วงเวลาตามตัวกรองที่เลือก
+          if (isDateInFilter(item.date, filterType)) {
+            if (isIncome) totalIncome += item.amount;
+            else totalExpense += item.amount;
 
-          tr.innerHTML = `
-            <td>${item.date}</td>
-            <td>${item.memo}</td>
-            <td class="income-text">${isIncome ? item.amount : '-'}</td>
-            <td class="expense-text">${!isIncome ? item.amount : '-'}</td>
-            <td><button class="btn-delete" onclick="deleteTransaction('${id}')">ลบ</button></td>
-          `;
-          tbody.appendChild(tr);
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+              <td>${item.date}</td>
+              <td>${item.memo}</td>
+              <td class="income-text">${isIncome ? item.amount : '-'}</td>
+              <td class="expense-text">${!isIncome ? item.amount : '-'}</td>
+              <td><button class="btn-delete" onclick="deleteTransaction('${id}')">ลบ</button></td>
+            `;
+            tbody.appendChild(tr);
+          }
         });
+
+        if (tbody.children.length === 0) {
+          tbody.innerHTML = "<tr><td colspan='5'>ไม่มีรายการในช่วงเวลานี้</td></tr>";
+        }
 
         const balance = totalIncome - totalExpense;
         const balanceElement = document.getElementById('total-balance');
@@ -275,21 +348,19 @@
         return;
       }
 
-      // บันทึกชื่อร้านลงคอลเลกชัน "stores" ใน Firebase
       await addDoc(collection(db, "stores"), {
         name: storeName
       });
 
       nameInput.value = "";
-      
-      // โหลดรายชื่อร้านค้าใหม่ทั้งหมด
-      await loadStores();
-
-      // สลับไปยังร้านใหม่ทันที
-      document.getElementById('store-select').value = storeName;
       currentStore = storeName;
+      
+      await loadStores();
       loadData();
     };
+
+    // ผูกฟังก์ชัน loadData ไว้ให้ Dropdown เรียกใช้งานได้
+    window.loadData = loadData;
 
     // โหลดข้อมูลทั้งหมดเมื่อเริ่มเปิดหน้าเว็บ
     async function initApp() {
