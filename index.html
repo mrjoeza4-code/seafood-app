@@ -303,7 +303,7 @@
       return true;
     }
 
-    // โหลดข้อมูลและกรองตามเงื่อนไข
+    // โหลดข้อมูล จัดเรียงตามวันที่ และกรองตามเงื่อนไข
     async function loadData() {
       const tbody = document.getElementById('table-body');
       tbody.innerHTML = "<tr><td colspan='5'>กำลังโหลดข้อมูล...</td></tr>";
@@ -321,9 +321,20 @@
         let totalIncome = 0;
         let totalExpense = 0;
 
+        let itemList = [];
         querySnapshot.forEach((docSnap) => {
-          const item = docSnap.data();
-          const id = docSnap.id;
+          itemList.push({
+            id: docSnap.id,
+            ...docSnap.data()
+          });
+        });
+
+        // จัดเรียงข้อมูลตามวันที่ (ล่าสุดขึ้นก่อน)
+        itemList.sort((a, b) => new Date(b.date) - new Date(a.date));
+
+        let hasData = false;
+
+        itemList.forEach((item) => {
           const isIncome = item.type === 'income';
 
           // กรองช่วงเวลา และ กรองประเภทรายรับ-รายจ่าย
@@ -331,6 +342,8 @@
             if (selectedType !== 'all' && item.type !== selectedType) {
               return;
             }
+
+            hasData = true;
 
             if (isIncome) totalIncome += item.amount;
             else totalExpense += item.amount;
@@ -341,13 +354,13 @@
               <td>${item.memo}</td>
               <td class="income-text">${isIncome ? item.amount.toLocaleString() : '-'}</td>
               <td class="expense-text">${!isIncome ? item.amount.toLocaleString() : '-'}</td>
-              <td><button class="btn-delete" onclick="deleteTransaction('${id}')">ลบ</button></td>
+              <td><button class="btn-delete" onclick="deleteTransaction('${item.id}')">ลบ</button></td>
             `;
             tbody.appendChild(tr);
           }
         });
 
-        if (tbody.children.length === 0) {
+        if (!hasData) {
           tbody.innerHTML = "<tr><td colspan='5'>ไม่มีรายการตามเงื่อนไขที่เลือก</td></tr>";
         }
 
