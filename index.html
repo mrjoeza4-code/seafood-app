@@ -30,8 +30,13 @@
     }
     .store-add {
       display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin-top: 10px;
+    }
+    .store-add-row {
+      display: flex;
       gap: 5px;
-      margin-top: 8px;
     }
     .filter-section {
       background-color: #f8f9fa;
@@ -125,12 +130,16 @@
     <div class="store-section">
       <label><b>เลือกเล่มบัญชีร้านค้า:</b></label>
       <select id="store-select" onchange="changeStore()" style="width: 100%; margin-top: 5px;">
-        <option value="ร้านลุงแอ๊ตซีฟู้ด">ร้านลุงแอ๊ตซีฟู้ด</option>
+        <option value="">-- กำลังโหลดร้านค้า... --</option>
       </select>
 
       <div class="store-add">
-        <input type="text" id="new-store-name" placeholder="เพิ่มชื่อร้านใหม่..." style="flex: 1;">
-        <button onclick="addNewStore()">+ เพิ่มร้าน</button>
+        <label style="font-size: 13px; font-weight: bold;">➕ เพิ่มร้านค้าใหม่:</label>
+        <div class="store-add-row">
+          <input type="text" id="new-store-name" placeholder="ชื่อร้านค้า..." style="flex: 1;">
+          <input type="password" id="new-store-pin" placeholder="รหัสผ่าน (6-10 หลัก)" maxlength="10" style="width: 140px;">
+        </div>
+        <button onclick="addNewStore()">+ สร้างร้านและตั้งรหัสผ่าน</button>
       </div>
     </div>
 
@@ -218,25 +227,29 @@
     const db = getFirestore(app);
 
     let currentStore = "ร้านลุงแอ๊ตซีฟู้ด";
+    let storesData = {}; // เก็บรหัสผ่านของแต่ละร้านไว้ในหน่วยความจำชั่วคราว
+    let isAuthenticated = false; // สถานะปลดล็อคร้านปัจจุบัน
 
     document.getElementById('date').valueAsDate = new Date();
 
-    // โหลดรายชื่อร้านค้าจาก Firebase
+    // โหลดรายชื่อร้านค้าพร้อมรหัสผ่านจาก Firebase
     async function loadStores() {
       const select = document.getElementById('store-select');
-      let storeList = ["ร้านลุงแอ๊ตซีฟู้ด"];
+      storesData = {
+        "ร้านลุงแอ๊ตซีฟู้ด": "123456" // รหัสเริ่มต้นของร้านแรก
+      };
 
       try {
         const querySnapshot = await getDocs(collection(db, "stores"));
         querySnapshot.forEach((docSnap) => {
           const storeData = docSnap.data();
-          if (storeData.name && !storeList.includes(storeData.name)) {
-            storeList.push(storeData.name);
+          if (storeData.name) {
+            storesData[storeData.name] = storeData.pin || "123456";
           }
         });
 
         select.innerHTML = "";
-        storeList.forEach((storeName) => {
+        Object.keys(storesData).forEach((storeName) => {
           const option = document.createElement('option');
           option.value = storeName;
           option.textContent = storeName;
@@ -251,6 +264,31 @@
       }
     }
 
+    // ฟังก์ชันสำหรับขอยืนยันรหัสผ่านร้านค้า
+    function checkStoreAuth() {
+      const targetPin = storesData[currentStore];
+      if (!targetPin) {
+        isAuthenticated = true;
+        return true;
+      }
+
+      const inputPin = prompt(`🔒 กรุณากรอกรหัสผ่านเพื่อเข้าใช้งานบัญชี "${currentStore}":`);
+      
+      if (inputPin === targetPin) {
+        isAuthenticated = true;
+        return true;
+      } else {
+        alert("❌ รหัสผ่านไม่ถูกต้อง! ไม่สามารถเข้าถึงเล่มบัญชีนี้ได้");
+        isAuthenticated = false;
+        
+        // ล้างการแสดงผลตาราง
+        const tbody = document.getElementById('table-body');
+        tbody.innerHTML = "<tr><td colspan='5' style='color:red;'>🔒 ล็อคอยู่ - กรุณาใส่รหัสผ่านให้ถูกต้อง</td></tr>";
+        document.getElementById('total-balance').textContent = "0 บาท";
+        return false;
+      }
+    }
+
     // เปิด-ปิดการแสดงผลตัวเลือกวันที่กำหนดเอง
     window.handlePeriodChange = function() {
       const filterType = document.getElementById('time-filter').value;
@@ -260,7 +298,7 @@
       } else {
         customBox.style.display = 'none';
       }
-      loadData();
+      if (isAuthenticated) loadData();
     };
 
     // ตรวจสอบเงื่อนไขวันที่
@@ -305,6 +343,8 @@
 
     // โหลดข้อมูล จัดเรียงตามวันที่ และกรองตามเงื่อนไข
     async function loadData() {
+      if (!isAuthenticated) return;
+
       const tbody = document.getElementById('table-body');
       tbody.innerHTML = "<tr><td colspan='5'>กำลังโหลดข้อมูล...</td></tr>";
 
@@ -376,6 +416,12 @@
 
     // บันทึกรายการ
     window.addTransaction = async function() {
+      if (!isAuthenticated) {
+        alert("กรุณาใส่รหัสผ่านเพื่อปลดล็อคร้านค้าก่อนบันทึกรายการ");
+        checkStoreAuth();
+        return;
+      }
+
       const date = document.getElementById('date').value;
       const memo = document.getElementById('memo').value || "-";
       const type = document.getElementById('type').value;
@@ -402,8 +448,10 @@
 
     // ลบรายการ
     window.deleteTransaction = async function(id) {
+      if (!isAuthenticated) return;
+      
       if (confirm("คุณต้องการลบรายการนี้ใช่หรือไม่?")) {
-        await deleteDoc(doc(db, "transactions", id));
+        await deleteDoc(doc(doc(db, "transactions", id)));
         loadData();
       }
     };
@@ -411,26 +459,40 @@
     // สลับร้านค้า
     window.changeStore = function() {
       currentStore = document.getElementById('store-select').value;
-      loadData();
+      if (checkStoreAuth()) {
+        loadData();
+      }
     };
 
-    // เพิ่มร้านค้าใหม่
+    // เพิ่มร้านค้าใหม่พร้อมรหัสผ่าน (6-10 หลัก)
     window.addNewStore = async function() {
       const nameInput = document.getElementById('new-store-name');
+      const pinInput = document.getElementById('new-store-pin');
+      
       const storeName = nameInput.value.trim();
+      const storePin = pinInput.value.trim();
 
       if (!storeName) {
         alert("กรุณากรอกชื่อร้านค้า");
         return;
       }
 
+      if (!storePin || storePin.length < 6 || storePin.length > 10) {
+        alert("กรุณากำหนดรหัสผ่านความยาวระหว่าง 6 ถึง 10 หลัก");
+        return;
+      }
+
       await addDoc(collection(db, "stores"), {
-        name: storeName
+        name: storeName,
+        pin: storePin
       });
 
       nameInput.value = "";
+      pinInput.value = "";
       currentStore = storeName;
+      isAuthenticated = true; // ปลดล็อคให้อัตโนมัติเมื่อเพิ่งสร้างร้านใหม่
       
+      alert(`สร้างร้านค้า "${storeName}" เรียบร้อยแล้ว!`);
       await loadStores();
       loadData();
     };
@@ -439,7 +501,9 @@
 
     async function initApp() {
       await loadStores();
-      loadData();
+      if (checkStoreAuth()) {
+        loadData();
+      }
     }
 
     initApp();
