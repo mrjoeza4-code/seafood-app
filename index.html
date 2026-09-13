@@ -28,6 +28,11 @@
       margin-bottom: 15px;
       border: 1px solid #bce0fd;
     }
+    .store-select-row {
+      display: flex;
+      gap: 8px;
+      margin-top: 5px;
+    }
     .store-add {
       display: flex;
       flex-direction: column;
@@ -87,6 +92,17 @@
       font-weight: bold;
       cursor: pointer;
     }
+    .btn-delete-store {
+      background-color: #ff3b30;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      padding: 0 12px;
+      font-size: 13px;
+      font-weight: bold;
+      cursor: pointer;
+      white-space: nowrap;
+    }
     table {
       width: 100%;
       border-collapse: collapse;
@@ -126,13 +142,17 @@
   <div class="card">
     <h2 id="app-title">🏪 บัญชีร้านค้า</h2>
 
-    <!-- ส่วนเลือกและเพิ่มร้านค้า -->
+    <!-- ส่วนเลือก และ ลบร้านค้า -->
     <div class="store-section">
       <label><b>เลือกเล่มบัญชีร้านค้า:</b></label>
-      <select id="store-select" onchange="changeStore()" style="width: 100%; margin-top: 5px;">
-        <option value="">-- กำลังโหลดร้านค้า... --</option>
-      </select>
+      <div class="store-select-row">
+        <select id="store-select" onchange="changeStore()" style="flex: 1;">
+          <option value="">-- กำลังโหลดร้านค้า... --</option>
+        </select>
+        <button class="btn-delete-store" onclick="deleteCurrentStore()">🗑️ ลบร้านนี้</button>
+      </div>
 
+      <!-- ส่วนเพิ่มร้านค้าใหม่ -->
       <div class="store-add">
         <label style="font-size: 13px; font-weight: bold;">➕ เพิ่มร้านค้าใหม่:</label>
         <div class="store-add-row">
@@ -226,30 +246,44 @@
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
 
-    let currentStore = "ร้านลุงแอ๊ตซีฟู้ด";
-    let storesData = {}; // เก็บรหัสผ่านของแต่ละร้านไว้ในหน่วยความจำชั่วคราว
-    let isAuthenticated = false; // สถานะปลดล็อคร้านปัจจุบัน
+    let currentStore = "";
+    let storesData = {}; // เก็บรหัสผ่านและ ID เอกสารของร้านค้า
+    let isAuthenticated = false;
 
     document.getElementById('date').valueAsDate = new Date();
 
     // โหลดรายชื่อร้านค้าพร้อมรหัสผ่านจาก Firebase
     async function loadStores() {
       const select = document.getElementById('store-select');
-      storesData = {
-        "ร้านลุงแอ๊ตซีฟู้ด": "123456" // รหัสเริ่มต้นของร้านแรก
-      };
+      storesData = {};
 
       try {
         const querySnapshot = await getDocs(collection(db, "stores"));
         querySnapshot.forEach((docSnap) => {
           const storeData = docSnap.data();
           if (storeData.name) {
-            storesData[storeData.name] = storeData.pin || "123456";
+            storesData[storeData.name] = {
+              docId: docSnap.id,
+              pin: storeData.pin || "123456"
+            };
           }
         });
 
+        const storeNames = Object.keys(storesData);
+
+        if (storeNames.length === 0) {
+          select.innerHTML = "<option value=''>-- ไม่มีร้านค้า --</option>";
+          currentStore = "";
+          return;
+        }
+
+        // หากร้านปัจจุบันไม่มีอยู่ในรายการ ให้เลือกชื่อร้านแรก
+        if (!currentStore || !storesData[currentStore]) {
+          currentStore = storeNames[0];
+        }
+
         select.innerHTML = "";
-        Object.keys(storesData).forEach((storeName) => {
+        storeNames.forEach((storeName) => {
           const option = document.createElement('option');
           option.value = storeName;
           option.textContent = storeName;
@@ -266,22 +300,21 @@
 
     // ฟังก์ชันสำหรับขอยืนยันรหัสผ่านร้านค้า
     function checkStoreAuth() {
-      const targetPin = storesData[currentStore];
-      if (!targetPin) {
-        isAuthenticated = true;
-        return true;
+      if (!currentStore || !storesData[currentStore]) {
+        isAuthenticated = false;
+        return false;
       }
 
+      const targetPin = storesData[currentStore].pin;
       const inputPin = prompt(`🔒 กรุณากรอกรหัสผ่านเพื่อเข้าใช้งานบัญชี "${currentStore}":`);
       
       if (inputPin === targetPin) {
         isAuthenticated = true;
         return true;
       } else {
-        alert("❌ รหัสผ่านไม่ถูกต้อง! ไม่สามารถเข้าถึงเล่มบัญชีนี้ได้");
+        alert("❌ รหัสผ่านไม่ถูกต้อง!");
         isAuthenticated = false;
         
-        // ล้างการแสดงผลตาราง
         const tbody = document.getElementById('table-body');
         tbody.innerHTML = "<tr><td colspan='5' style='color:red;'>🔒 ล็อคอยู่ - กรุณาใส่รหัสผ่านให้ถูกต้อง</td></tr>";
         document.getElementById('total-balance').textContent = "0 บาท";
@@ -341,9 +374,9 @@
       return true;
     }
 
-    // โหลดข้อมูล จัดเรียงตามวันที่ และกรองตามเงื่อนไข
+    // โหลดข้อมูล จัดเรียงตามวันที่
     async function loadData() {
-      if (!isAuthenticated) return;
+      if (!isAuthenticated || !currentStore) return;
 
       const tbody = document.getElementById('table-body');
       tbody.innerHTML = "<tr><td colspan='5'>กำลังโหลดข้อมูล...</td></tr>";
@@ -369,7 +402,6 @@
           });
         });
 
-        // จัดเรียงข้อมูลตามวันที่ (ล่าสุดขึ้นก่อน)
         itemList.sort((a, b) => new Date(b.date) - new Date(a.date));
 
         let hasData = false;
@@ -377,7 +409,6 @@
         itemList.forEach((item) => {
           const isIncome = item.type === 'income';
 
-          // กรองช่วงเวลา และ กรองประเภทรายรับ-รายจ่าย
           if (isDateInFilter(item.date, filterType)) {
             if (selectedType !== 'all' && item.type !== selectedType) {
               return;
@@ -451,7 +482,7 @@
       if (!isAuthenticated) return;
       
       if (confirm("คุณต้องการลบรายการนี้ใช่หรือไม่?")) {
-        await deleteDoc(doc(doc(db, "transactions", id)));
+        await deleteDoc(doc(db, "transactions", id));
         loadData();
       }
     };
@@ -461,6 +492,52 @@
       currentStore = document.getElementById('store-select').value;
       if (checkStoreAuth()) {
         loadData();
+      }
+    };
+
+    // ลบร้านค้าปัจจุบัน
+    window.deleteCurrentStore = async function() {
+      if (!currentStore || !storesData[currentStore]) {
+        alert("ไม่พบร้านค้าที่เลือก");
+        return;
+      }
+
+      const storeToDelete = currentStore;
+      const targetPin = storesData[storeToDelete].pin;
+      const inputPin = prompt(`⚠️ คำเตือน: การลบร้านค้าจะลบข้อมูลบัญชีทั้งหมดในร้านนี้!\n\nกรุณากรอกรหัสผ่านของร้าน "${storeToDelete}" เพื่อยืนยันการลบ:`);
+
+      if (inputPin !== targetPin) {
+        alert("❌ รหัสผ่านไม่ถูกต้อง ยกเลิกการลบร้านค้า");
+        return;
+      }
+
+      if (confirm(`คุณแน่ใจหรือไม่ที่จะลบร้านค้า "${storeToDelete}" และรายการทั้งหมดในร้านนี้?`)) {
+        try {
+          // 1. ลบเอกสารร้านค้า
+          const storeDocId = storesData[storeToDelete].docId;
+          if (storeDocId) {
+            await deleteDoc(doc(db, "stores", storeDocId));
+          }
+
+          // 2. ลบรายการทั้งหมดที่สังกัดร้านนี้
+          const q = query(collection(db, "transactions"), where("store", "==", storeToDelete));
+          const querySnapshot = await getDocs(q);
+          querySnapshot.forEach(async (docSnap) => {
+            await deleteDoc(doc(db, "transactions", docSnap.id));
+          });
+
+          alert(`ลบร้านค้า "${storeToDelete}" เรียบร้อยแล้ว`);
+          
+          currentStore = "";
+          await loadStores();
+          
+          if (currentStore && checkStoreAuth()) {
+            loadData();
+          }
+        } catch (error) {
+          console.error("เกิดข้อผิดพลาดในการลบร้านค้า:", error);
+          alert("เกิดข้อผิดพลาดในการลบร้านค้า");
+        }
       }
     };
 
@@ -490,7 +567,7 @@
       nameInput.value = "";
       pinInput.value = "";
       currentStore = storeName;
-      isAuthenticated = true; // ปลดล็อคให้อัตโนมัติเมื่อเพิ่งสร้างร้านใหม่
+      isAuthenticated = true;
       
       alert(`สร้างร้านค้า "${storeName}" เรียบร้อยแล้ว!`);
       await loadStores();
@@ -501,7 +578,7 @@
 
     async function initApp() {
       await loadStores();
-      if (checkStoreAuth()) {
+      if (currentStore && checkStoreAuth()) {
         loadData();
       }
     }
