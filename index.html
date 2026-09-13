@@ -1,3 +1,9 @@
+นี่คือโค้ดฉบับปรับปรุงจากโค้ดหลักที่คุณให้บันทึกไว้ครับ!
+สิ่งที่อัปเดตเพิ่มเข้ามา:
+ * เลือกกำหนดวัน/เดือน/ปี เองได้: เพิ่มตัวเลือก 📅 กำหนดช่วงวันเอง... เมื่อเลือกแล้วจะมีช่องให้กดเลือก วันที่เริ่มต้น และ วันที่สิ้นสุด โผล่ขึ้นมาให้เลือกครับ
+ * เลือกดูประเภทรายการ: เพิ่มช่องให้เลือกดู แสดงทั้งหมด (รายรับ & รายจ่าย), 🟢 เฉพาะรายรับ หรือ 🔴 เฉพาะรายจ่าย
+ * ระบบโหลดร้านค้าจาก Cloud: ยังคงฟังก์ชันดึงรายชื่อร้านค้าจาก Firebase ตามโค้ดหลักเดิมครับ
+คุณสามารถนำโค้ดนี้ไปใช้งานได้เลยครับ:
 <!DOCTYPE html>
 <html lang="th">
 <head>
@@ -35,13 +41,33 @@
     }
     .filter-section {
       background-color: #f8f9fa;
-      padding: 10px;
-      border-radius: 8px;
+      padding: 12px;
+      border-radius: 10px;
       margin-bottom: 15px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
       border: 1px solid #e9ecef;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .filter-row {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+    .filter-row label {
+      font-size: 14px;
+      font-weight: bold;
+      white-space: nowrap;
+    }
+    .filter-row select, .filter-row input {
+      flex: 1;
+      padding: 6px 8px;
+      font-size: 14px;
+    }
+    .custom-date-box {
+      display: none;
+      gap: 5px;
+      align-items: center;
     }
     .form-group {
       display: flex;
@@ -126,15 +152,34 @@
       <button onclick="addTransaction()">+ บันทึกรายการ</button>
     </div>
 
-    <!-- ตัวกรองช่วงเวลา -->
+    <!-- ตัวกรองช่วงเวลา และ ประเภทรายการ -->
     <div class="filter-section">
-      <label><b>📅 ช่วงเวลา:</b></label>
-      <select id="time-filter" onchange="loadData()" style="padding: 5px 10px;">
-        <option value="all">แสดงทั้งหมด</option>
-        <option value="daily">📅 วันนี้</option>
-        <option value="weekly">🗓️ สัปดาห์นี้</option>
-        <option value="monthly">📆 เดือนนี้</option>
-      </select>
+      <div class="filter-row">
+        <label>📅 ช่วงเวลา:</label>
+        <select id="time-filter" onchange="handlePeriodChange()">
+          <option value="all">แสดงทั้งหมด</option>
+          <option value="daily">📅 วันนี้</option>
+          <option value="weekly">🗓️ สัปดาห์นี้</option>
+          <option value="monthly">📆 เดือนนี้</option>
+          <option value="custom">📆 กำหนดช่วงวันเอง...</option>
+        </select>
+      </div>
+
+      <!-- ช่องเลือกวันที่แบบกำหนดเอง -->
+      <div id="custom-date-box" class="filter-row custom-date-box">
+        <input type="date" id="start-date" onchange="loadData()">
+        <span>ถึง</span>
+        <input type="date" id="end-date" onchange="loadData()">
+      </div>
+
+      <div class="filter-row">
+        <label>📂 ประเภท:</label>
+        <select id="type-filter" onchange="loadData()">
+          <option value="all">แสดงทั้งหมด (รายรับ & รายจ่าย)</option>
+          <option value="income">🟢 เฉพาะรายรับ</option>
+          <option value="expense">🔴 เฉพาะรายจ่าย</option>
+        </select>
+      </div>
     </div>
 
     <!-- ตารางรายการ -->
@@ -175,16 +220,14 @@
       measurementId: "G-X2YQR06LG2"
     };
 
-    // เริ่มต้นเชื่อมต่อ Firebase
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
 
     let currentStore = "ร้านลุงแอ๊ตซีฟู้ด";
 
-    // กำหนดวันที่เริ่มต้นให้ช่อง Date Input เป็นวันปัจจุบัน
     document.getElementById('date').valueAsDate = new Date();
 
-    // โหลดรายชื่อร้านค้าทั้งหมดจาก Firebase
+    // โหลดรายชื่อร้านค้าจาก Firebase
     async function loadStores() {
       const select = document.getElementById('store-select');
       let storeList = ["ร้านลุงแอ๊ตซีฟู้ด"];
@@ -214,7 +257,19 @@
       }
     }
 
-    // ฟังก์ชันตรวจสอบเงื่อนไขวันที่สำหรับตัวกรอง
+    // เปิด-ปิดการแสดงผลตัวเลือกวันที่กำหนดเอง
+    window.handlePeriodChange = function() {
+      const filterType = document.getElementById('time-filter').value;
+      const customBox = document.getElementById('custom-date-box');
+      if (filterType === 'custom') {
+        customBox.style.display = 'flex';
+      } else {
+        customBox.style.display = 'none';
+      }
+      loadData();
+    };
+
+    // ตรวจสอบเงื่อนไขวันที่
     function isDateInFilter(dateStr, filterType) {
       if (filterType === "all") return true;
 
@@ -229,10 +284,10 @@
       if (filterType === "weekly") {
         const dayOfWeek = today.getDay();
         const startOfWeek = new Date(today);
-        startOfWeek.setDate(today.getDate() - dayOfWeek); // วันอาทิตย์ต้นสัปดาห์
+        startOfWeek.setDate(today.getDate() - dayOfWeek);
 
         const endOfWeek = new Date(startOfWeek);
-        endOfWeek.setDate(startOfWeek.getDate() + 6); // วันเสาร์ปลายสัปดาห์
+        endOfWeek.setDate(startOfWeek.getDate() + 6);
 
         return itemDate >= startOfWeek && itemDate <= endOfWeek;
       }
@@ -242,10 +297,19 @@
                itemDate.getMonth() === today.getMonth();
       }
 
+      if (filterType === "custom") {
+        const startDate = document.getElementById('start-date').value;
+        const endDate = document.getElementById('end-date').value;
+        
+        if (startDate && dateStr < startDate) return false;
+        if (endDate && dateStr > endDate) return false;
+        return true;
+      }
+
       return true;
     }
 
-    // ฟังก์ชันดึงข้อมูลรายการจาก Firebase พร้อมระบบกรองรายวัน/สัปดาห์/เดือน
+    // โหลดข้อมูลและกรองตามเงื่อนไข
     async function loadData() {
       const tbody = document.getElementById('table-body');
       tbody.innerHTML = "<tr><td colspan='5'>กำลังโหลดข้อมูล...</td></tr>";
@@ -253,6 +317,7 @@
       document.getElementById('app-title').textContent = `🏪 บัญชี: ${currentStore}`;
 
       const filterType = document.getElementById('time-filter').value;
+      const selectedType = document.getElementById('type-filter').value;
 
       try {
         const q = query(collection(db, "transactions"), where("store", "==", currentStore));
@@ -267,8 +332,12 @@
           const id = docSnap.id;
           const isIncome = item.type === 'income';
 
-          // ตรวจสอบเงื่อนไขช่วงเวลาตามตัวกรองที่เลือก
+          // กรองช่วงเวลา และ กรองประเภทรายรับ-รายจ่าย
           if (isDateInFilter(item.date, filterType)) {
+            if (selectedType !== 'all' && item.type !== selectedType) {
+              return;
+            }
+
             if (isIncome) totalIncome += item.amount;
             else totalExpense += item.amount;
 
@@ -276,8 +345,8 @@
             tr.innerHTML = `
               <td>${item.date}</td>
               <td>${item.memo}</td>
-              <td class="income-text">${isIncome ? item.amount : '-'}</td>
-              <td class="expense-text">${!isIncome ? item.amount : '-'}</td>
+              <td class="income-text">${isIncome ? item.amount.toLocaleString() : '-'}</td>
+              <td class="expense-text">${!isIncome ? item.amount.toLocaleString() : '-'}</td>
               <td><button class="btn-delete" onclick="deleteTransaction('${id}')">ลบ</button></td>
             `;
             tbody.appendChild(tr);
@@ -285,12 +354,12 @@
         });
 
         if (tbody.children.length === 0) {
-          tbody.innerHTML = "<tr><td colspan='5'>ไม่มีรายการในช่วงเวลานี้</td></tr>";
+          tbody.innerHTML = "<tr><td colspan='5'>ไม่มีรายการตามเงื่อนไขที่เลือก</td></tr>";
         }
 
         const balance = totalIncome - totalExpense;
         const balanceElement = document.getElementById('total-balance');
-        balanceElement.textContent = `${balance} บาท`;
+        balanceElement.textContent = `${balance.toLocaleString()} บาท`;
         balanceElement.style.color = balance >= 0 ? "#28a745" : "#dc3545";
       } catch (error) {
         console.error("เกิดข้อผิดพลาดในการโหลดข้อมูล:", error);
@@ -298,7 +367,7 @@
       }
     }
 
-    // บันทึกรายการลง Firebase
+    // บันทึกรายการ
     window.addTransaction = async function() {
       const date = document.getElementById('date').value;
       const memo = document.getElementById('memo').value || "-";
@@ -324,7 +393,7 @@
       loadData();
     };
 
-    // ลบรายการออกจาก Firebase
+    // ลบรายการ
     window.deleteTransaction = async function(id) {
       if (confirm("คุณต้องการลบรายการนี้ใช่หรือไม่?")) {
         await deleteDoc(doc(db, "transactions", id));
@@ -338,7 +407,7 @@
       loadData();
     };
 
-    // เพิ่มร้านค้าใหม่ลง Firebase
+    // เพิ่มร้านค้าใหม่
     window.addNewStore = async function() {
       const nameInput = document.getElementById('new-store-name');
       const storeName = nameInput.value.trim();
@@ -359,10 +428,8 @@
       loadData();
     };
 
-    // ผูกฟังก์ชัน loadData ไว้ให้ Dropdown เรียกใช้งานได้
     window.loadData = loadData;
 
-    // โหลดข้อมูลทั้งหมดเมื่อเริ่มเปิดหน้าเว็บ
     async function initApp() {
       await loadStores();
       loadData();
@@ -372,3 +439,4 @@
   </script>
 </body>
 </html>
+
